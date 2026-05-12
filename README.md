@@ -196,6 +196,267 @@ openssl dgst -sha256 -verify publica.pem -signature firma.bin config_bancaria.tx
 | **Impacto potencial** | En entorno productivo: fraude financiero por desvío de fondos sin detección inmediata si no se implementa verificación de integridad |
 | **Contramedida aplicada** | Firma digital RSA-2048 + SHA-256 mediante OpenSSL — cualquier alteración posterior a la firma invalida la verificación criptográfica |
 
+# Lab 2: Ataque y Defensa de Credenciales
+**Unidad 2 — Gestión Avanzada de Ciberseguridad: Actualización para la Prevención de Amenazas y Protección de Datos**
+
+---
+
+## 📄 Enunciado Original
+
+> **Actividad:** Realizar ataques de diccionario y fuerza bruta, para luego implementar MFA.
+>
+> **Herramientas:** Hydra, John the Ripper, Google Authenticator PAM module.
+>
+> **Tarea:** Romper una contraseña débil de SSH usando Hydra. Luego, instalar y configurar el módulo de Google Authenticator en el servidor Ubuntu para que, aunque el atacante tenga la clave, no pueda entrar sin el token.
+>
+> **Entorno:** Kali Linux (Atacante) vs Ubuntu (Víctima).
+>
+> **Dinámica:**
+> - **Fase de Ataque:** Desde Kali, usar Hydra para realizar un ataque de diccionario contra el servicio SSH del Ubuntu:
+>   ```bash
+>   hydra -l usuario -P lista_passwords.txt ssh://[IP_Servidor]
+>   ```
+> - **Fase de Hardening (MFA):** En el Ubuntu Server, instalar el módulo PAM de Google Authenticator:
+>   ```bash
+>   sudo apt install libpam-google-authenticator
+>   ```
+>   Ejecutar `google-authenticator` y configurar la App en el celular.
+> - **Configuración de SSH:** Modificar `/etc/pam.d/sshd` y `/etc/ssh/sshd_config` para exigir tanto la contraseña como el token (MFA).
+> - **Prueba Final:** Volver a intentar el ataque con Hydra. Aunque Hydra encuentre la contraseña, la conexión fallará porque no puede saltarse el segundo factor.
+
+---
+
+## 📝 Descripción y Objetivos
+
+Este laboratorio aborda uno de los vectores de ataque más frecuentes en entornos corporativos: la **explotación de credenciales débiles sobre el protocolo SSH mediante ataques de diccionario automatizados**. La premisa es simple pero contundente: si un servicio SSH expone autenticación solo por contraseña y esta es predecible, cualquier atacante con una lista de palabras comunes puede comprometer el servidor en cuestión de segundos utilizando herramientas de fuerza bruta como Hydra.
+
+El laboratorio se estructura en cuatro fases progresivas:
+
+1. **Fase de Reconocimiento y Preparación:** Se construye un diccionario de contraseñas simplificado que simula un wordlist real de ataque.
+
+2. **Fase Ofensiva (Ataque de Diccionario):** Desde Kali Linux, se ejecuta Hydra apuntando al servicio SSH del servidor Ubuntu víctima. El objetivo es comprometer la cuenta mediante fuerza bruta de diccionario y obtener las credenciales en texto plano.
+
+3. **Fase Defensiva (Hardening con MFA):** Se implementa autenticación multifactor (MFA) basada en TOTP (*Time-based One-Time Password*) mediante el módulo `libpam-google-authenticator`. Esta contramedida añade un segundo factor de autenticación que Hydra es incapaz de resolver, dado que el token es dinámico y cambia cada 30 segundos.
+
+4. **Fase de Verificación:** Se reitera el ataque con Hydra para demostrar empíricamente que, aunque el atacante posea la contraseña correcta, el segundo factor neutraliza completamente el vector de intrusión.
+
+**Finalidad académica:** Comprender que la seguridad de la autenticación no depende exclusivamente de la complejidad de la contraseña, sino de la arquitectura de verificación de identidad. Una contraseña robusta sin MFA sigue siendo un único punto de fallo; la autenticación multifactor convierte ese punto de fallo en una barrera compuesta que los ataques automatizados no pueden superar.
+
+---
+
+## 🌐 Datos de Red
+
+| Rol | Sistema Operativo | Dirección IP | Servicio expuesto |
+|---|---|---|---|
+| Atacante / Auditor | Kali Linux | `10.24.7.24` | — |
+| Servidor / Víctima | Ubuntu Server | `10.24.7.39` | SSH (puerto 22) |
+
+> ⚠️ Las IPs corresponden al entorno de red del laboratorio ejecutado. Verificar y actualizar según el entorno de ejecución propio.
+
+---
+
+## 🛠️ Herramientas Utilizadas
+
+| Herramienta | Origen | Propósito |
+|---|---|---|
+| **Hydra v9.5** | Incluido en Kali Linux | Ataque de diccionario automatizado contra SSH |
+| **libpam-google-authenticator** | Repositorio oficial Ubuntu | Módulo PAM para MFA basado en TOTP |
+| **Google Authenticator** | App móvil (Android/iOS) | Generación de tokens OTP de 6 dígitos cada 30s |
+| **nano** | Nativo en Ubuntu | Edición de archivos de configuración del sistema |
+| **OpenSSH** | Nativo en ambas máquinas | Protocolo de acceso remoto objetivo del ataque |
+
+---
+
+## 🗺️ Hoja de Ruta
+
+### Fase 1 — Preparación del Diccionario de Ataque
+
+**Objetivo:** Construir el wordlist que Hydra utilizará durante el ataque de diccionario.
+
+**Paso 1:** Crear el archivo de diccionario con contraseñas comunes en Kali:
+```bash
+echo -e "123456\password\admin123\ubuntu\qwerty\mango2020" > lista_passwords.txt
+```
+
+> **Observación:** Comando `echo` generando el archivo `lista_passwords.txt` con contraseñas comunes. En un escenario real de auditoría, se utilizarían wordlists como `rockyou.txt` (14 millones de entradas) disponibles en `/usr/share/wordlists/` en Kali.
+
+---
+
+### Fase 2 — Ataque de Diccionario con Hydra
+
+**Objetivo:** Comprometer la cuenta SSH del servidor Ubuntu explotando una contraseña débil mediante fuerza bruta de diccionario.
+
+**Paso 3:** Ejecutar Hydra apuntando al servicio SSH con el usuario objetivo:
+```bash
+hydra -l mango -P lista_passwords.txt ssh://10.24.7.39
+```
+
+| Flag | Descripción |
+|---|---|
+| `-l mango` | Usuario objetivo (login fijo) |
+| `-P lista_passwords.txt` | Wordlist con contraseñas a probar |
+| `ssh://10.24.7.39` | Protocolo y dirección IP del objetivo |
+
+<img width="980" height="438" alt="image" src="https://github.com/user-attachments/assets/bdf4c237-29bf-4504-8f47-cb8f7b807876" />
+
+> **Observación:** Hydra v9.5 reporta `[22][ssh] host: 10.129.70.39 login: mango password: mango2020`. La línea en verde confirma que el ataque de diccionario tuvo éxito: el servicio SSH del servidor víctima fue comprometido en una sola iteración del wordlist. El tiempo total del ataque fue de 4 segundos, evidenciando la velocidad de este tipo de ataques contra credenciales débiles.
+
+---
+
+### Fase 3 — Hardening con MFA (En Ubuntu Server)
+
+**Objetivo:** Implementar autenticación multifactor basada en TOTP para neutralizar el vector de ataque demostrado en la Fase 2.
+
+**Paso 4:** Instalar el módulo PAM de Google Authenticator en el servidor Ubuntu:
+```bash
+sudo apt update && sudo apt install libpam-google-authenticator -y
+```
+
+<img width="980" height="201" alt="image" src="https://github.com/user-attachments/assets/4868fd70-33d5-49fb-aa9c-d1c7b943c7ea" />
+
+
+> **Observación:** Terminal del Ubuntu Server mostrando la instalación exitosa del paquete `libpam-google-authenticator`. El módulo queda disponible para ser referenciado por el sistema PAM (*Pluggable Authentication Modules*) del sistema operativo.
+
+---
+
+**Paso 5:** Ejecutar el configurador **con el usuario a proteger** (no como root):
+```bash
+google-authenticator
+```
+
+<img width="980" height="747" alt="image" src="https://github.com/user-attachments/assets/8208a3c3-09a5-42d8-9c47-0c461a902b53" />
+
+> **Observación:** El configurador solicita confirmación para usar tokens basados en tiempo (TOTP). Se responde `y` para activar el estándar RFC 6238, que genera códigos válidos por 30 segundos basados en la hora actual y un secreto compartido.
+
+---
+
+<img width="930" height="138" alt="image" src="https://github.com/user-attachments/assets/cf90d80b-28d2-47f9-88b4-54282003ffee" />
+
+> **Observación:** El configurador genera un código QR y muestra la *secret key* (`ZHKE7VDYFZJNCF4CYCKZJ4F2WI`) en texto plano. El código QR debe ser escaneado con la app Google Authenticator en el dispositivo móvil para vincular el servidor. Esta clave es el secreto compartido sobre el que se derivarán todos los tokens TOTP futuros.
+
+---
+
+<img width="980" height="238" alt="image" src="https://github.com/user-attachments/assets/03b3d763-3734-47d2-af73-09f1d27a184d" />
+
+> **Observación:** Tras ingresar el primer código generado por la app (`129897`), el configurador lo valida con `Code confirmed` y genera cinco *emergency scratch codes*. Estos códigos de un solo uso sirven como mecanismo de recuperación en caso de pérdida del dispositivo móvil y deben almacenarse de forma segura.
+
+---
+
+<img width="980" height="503" alt="image" src="https://github.com/user-attachments/assets/d8af4c14-69e5-48af-b137-44d697a66663" />
+
+> **Observación:** Configuración de parámetros de seguridad adicionales: se deshabilita el reúso del mismo token en múltiples autenticaciones (previene ataques de replay), se habilita una ventana de tolerancia temporal de ±30 segundos para compensar desincronización de reloj entre cliente y servidor, y se activa el rate-limiting nativo del módulo (máximo 3 intentos cada 30 segundos).
+
+---
+
+<img width="294" height="392" alt="image" src="https://github.com/user-attachments/assets/3931d9a2-971b-450e-bc45-be287a93da64" />
+
+> **Observación:** Captura del dispositivo móvil con la app Google Authenticator mostrando el token TOTP activo para la cuenta `mango@UbuntuServer` (código `679 004`). Otros tokens del dispositivo están ofuscados por privacidad. Esto confirma el vínculo exitoso entre el servidor y el segundo factor de autenticación físico.
+
+---
+
+### Fase 4 — Configuración Crítica del Sistema (Archivos PAM y SSH)
+
+**Objetivo:** Modificar los archivos de configuración del sistema para que SSH exija obligatoriamente ambos factores de autenticación.
+
+**Paso 6:** Editar el archivo de configuración PAM para SSH y añadir la directiva del módulo al final:
+```bash
+sudo nano /etc/pam.d/sshd
+```
+Línea añadida al final del archivo:
+```
+auth required libpam_google_authenticator.so
+```
+
+<img width="661" height="111" alt="image" src="https://github.com/user-attachments/assets/85f1d9a0-bbc2-41a0-9aa9-40049a82801b" />
+
+> **Observación:** Contenido del archivo `/etc/pam.d/sshd` mostrando la línea `auth required libpam_google_authenticator.so` añadida al final. Esta directiva instruye al sistema PAM para que invoque el módulo de Google Authenticator como requisito obligatorio durante el proceso de autenticación SSH.
+
+---
+
+**Paso 7:** Editar la configuración del demonio SSH para habilitar autenticación interactiva:
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+<img width="980" height="124" alt="image" src="https://github.com/user-attachments/assets/5a76b015-f13b-4422-a76e-4512172d64d0" />
+
+> **Observación:** Parámetro `KbdInteractiveAuthentication yes` habilitado en `sshd_config`. Esta directiva permite que el servidor SSH interactúe con el usuario mediante prompts de teclado durante la autenticación, mecanismo necesario para solicitar el código TOTP.
+
+---
+
+<img width="550" height="131" alt="image" src="https://github.com/user-attachments/assets/8fe407bf-2b3b-40ea-97db-c7321ebc4fc7" />
+
+> **Observación:** Parámetro `UsePAM yes` confirmado activo. Esta directiva delega el proceso de autenticación al stack PAM del sistema operativo, que a su vez invocará el módulo `libpam_google_authenticator.so` configurado en el paso anterior.
+
+---
+
+<img width="713" height="142" alt="image" src="https://github.com/user-attachments/assets/7ce9315f-75cc-4a29-8021-c14778fb6aae" />
+
+> **Observación:** Directiva `AuthenticationMethods password,keyboard-interactive` añadida al final de `sshd_config`. Esta línea es el núcleo del MFA: instruye a OpenSSH para que exija ambos factores de forma secuencial — primero la contraseña y luego el token TOTP — antes de conceder acceso. Si cualquiera de los dos factores falla, la sesión es rechazada.
+
+---
+
+### Fase 5 — Verificación del Hardening
+
+**Objetivo:** Confirmar que el MFA implementado neutraliza tanto el acceso manual sin token como el ataque automatizado con Hydra.
+
+**Paso 8:** Intentar acceso SSH desde Kali con la contraseña previamente comprometida:
+```bash
+ssh mango@10.24.7.39
+```
+
+<img width="980" height="324" alt="image" src="https://github.com/user-attachments/assets/39319ec7-c37a-4e25-b9d4-ff6f064b9188" />
+
+> **Observación:** Intento de acceso SSH desde Kali utilizando la contraseña `mango2020` descubierta por Hydra en la Fase 2. El servidor responde con `Permission denied, please try again`, bloqueando el acceso. Aunque la contraseña es correcta, la ausencia del segundo factor (código TOTP del dispositivo móvil) impide la autenticación exitosa.
+
+---
+
+**Paso 9:** Reiterar el ataque con Hydra para validar la efectividad del MFA:
+```bash
+hydra -l mango -P lista_passwords.txt ssh://10.24.7.39
+```
+
+<img width="980" height="417" alt="image" src="https://github.com/user-attachments/assets/9e538a0f-183d-4e40-86a9-dbb09c125eca" />
+
+> **Observación:** Segunda ejecución de Hydra con el MFA activo. El resultado es `0 of 1 target successfully completed, 0 valid password found`. A pesar de que el wordlist contiene la contraseña correcta (`mango2020`), Hydra es incapaz de superar el segundo factor de autenticación. El protocolo `keyboard-interactive` requerido por el token TOTP interrumpe el flujo de autenticación automatizada, dado que Hydra no puede generar ni inferir un código válido que cambia cada 30 segundos.
+
+---
+
+## 📊 Comparativa de Resultados
+
+| Escenario | Herramienta | Resultado | Conclusión |
+|---|---|---|---|
+| Ataque SSH — solo contraseña | Hydra | ✅ `password: mango2020` encontrada | Credencial comprometida en 4 segundos |
+| Acceso manual — contraseña correcta, sin token | SSH client | ❌ `Permission denied` | MFA bloquea acceso sin segundo factor |
+| Ataque SSH — con MFA activo | Hydra | ❌ `0 valid password found` | Ataque automatizado neutralizado completamente |
+
+---
+
+## 📚 Marco Conceptual
+
+**Ataque de Diccionario:** Variante de fuerza bruta que prueba sistemáticamente palabras de un wordlist precompilado en lugar de todas las combinaciones posibles. Es significativamente más eficiente que la fuerza bruta pura porque explota el hecho de que los usuarios tienden a elegir contraseñas predecibles o derivadas de palabras del lenguaje natural. Herramientas como Hydra permiten paralelizar estos intentos a alta velocidad contra protocolos de red como SSH, FTP o HTTP.
+
+**MFA / TOTP (RFC 6238):** La autenticación multifactor combina al menos dos factores de categorías distintas — algo que sabes (contraseña), algo que tienes (dispositivo móvil), algo que eres (biometría). TOTP (*Time-based One-Time Password*) es el estándar que sustenta Google Authenticator: genera un código de 6 dígitos derivado de un secreto compartido y la hora Unix actual (ventana de 30 segundos). El código es efímero e impredecible para un atacante sin acceso físico al dispositivo.
+
+**PAM (Pluggable Authentication Modules):** Framework de autenticación modular de Linux (RFC no oficial, implementación original de Sun Microsystems) que permite agregar, modificar o encadenar mecanismos de autenticación sin modificar las aplicaciones que los usan. El archivo `/etc/pam.d/sshd` define la pila de módulos que se invocan secuencialmente cuando OpenSSH autentica una sesión entrante.
+
+**keyboard-interactive (RFC 4256):** Método de autenticación SSH que establece un canal de diálogo interactivo entre el cliente y el servidor, permitiendo al servidor solicitar información adicional (como un código OTP) más allá de la contraseña estática. Es el mecanismo que hace posible el MFA sobre SSH sin modificar el protocolo base.
+
+
+### 📋 Reporte de Incidente Simulado
+
+| Campo | Detalle |
+|---|---|
+| **Naturaleza de la anomalía** | Compromiso de credenciales SSH mediante ataque de diccionario automatizado — contraseña débil (`mango2020`) expuesta en 4 segundos |
+| **Sistema afectado** | Ubuntu Server — servicio OpenSSH (puerto 22), cuenta de usuario `mango` |
+| **Vector de ataque** | Hydra v9.5 ejecutado desde Kali Linux — diccionario de 6 entradas |
+| **Método de detección** | Ejecución controlada en entorno de laboratorio; en producción detectable mediante análisis de logs `/var/log/auth.log` o sistema IDS/SIEM |
+| **Hora del hallazgo** | 2026-04-30 12:23:13 (timestamp registrado por Hydra en la captura) |
+| **Impacto potencial** | En entorno productivo: acceso root escalable, exfiltración de datos, pivoting hacia otros sistemas de la red interna |
+| **Contramedida aplicada** | MFA-TOTP mediante `libpam-google-authenticator` + modificación de `sshd_config` con `AuthenticationMethods password,keyboard-interactive` |
+| **Resultado post-hardening** | Hydra reporta `0 valid password found` — vector de ataque completamente neutralizado |
+
+---
 
 # Laboratorio #3
 # Lab 3: Protocolos de Comunicación Seguros
